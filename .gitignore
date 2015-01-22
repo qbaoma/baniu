@@ -52,3 +52,6 @@ docs/_build/
 
 # PyBuilder
 target/
+/tests
+/cmd.exe
+/projcet_log.rst
