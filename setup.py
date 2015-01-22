@@ -8,7 +8,8 @@ if sys.argv[-1] == 'test':
     test_requirements = [
         'pytest',
         'flake8',
-        'coverage'
+        'coverage',
+        'pytest-cov'
     ]
     try:
         modules = map(__import__, test_requirements)
@@ -16,7 +17,7 @@ if sys.argv[-1] == 'test':
         err_msg = e.message.replace("No module named ", "")
         msg = "%s is not installed. Install your test requirments." % err_msg
         raise ImportError(msg)
-    os.system('py.test')
+    os.system('py.test --cov=baniu')
     sys.exit()
 
 if sys.argv[-1] == 'doc':

@@ -8,11 +8,11 @@ creating a storage module for Django and `SAE <http://sae.sina.com.cn/>`_.
 Quick start
 ------------
 
-1.\ :strike:`Install this package use pip::
+1.Install this package use pip::
 
     pip install baniu
 
-Or`\  install from source::
+Or install from source::
 
     python setup.py install
 
