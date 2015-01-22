@@ -21,6 +21,7 @@ STORAGE_BUCKET_NAME = getattr(settings, "STORAGE_BUCKET_NAME")
 STORAGE_ACCESSKEY = getattr(settings, "STORAGE_ACCESSKEY")
 STORAGE_SECRETKEY = getattr(settings, "STORAGE_SECRETKEY")
 STORAGE_DOMAIN = getattr(settings, "STORAGE_DOMAIN")
+ALLOWED_HOST = getattr(settings, "STORAGE_ALLOWED_HOST", '')
 
 
 class Error(Exception):
@@ -35,8 +36,10 @@ class Storage(Storage):
     def __init__(self, bucket_name=STORAGE_BUCKET_NAME,
                  apikey=STORAGE_ACCESSKEY,
                  apisecret=STORAGE_SECRETKEY,
-                 bucket_domain=STORAGE_DOMAIN):
-        self.bucket = Bucket(bucket_name, apikey, apisecret, bucket_domain)
+                 bucket_domain=STORAGE_DOMAIN,
+                 allowed_host=ALLOWED_HOST):
+        self.bucket = Bucket(bucket_name, apikey, apisecret, bucket_domain,
+                             allowed_host)
 
     def _open(self, name, mode="rb"):
         name = self._normalize_name(name)
@@ -113,7 +116,7 @@ class StorageFile(File):
     def __init__(self, name, mode, storage):
         self.name = name
         self.mode = mode
-        self.file = StringIO()
+        self.file = StringIO.StringIO()
         self._storage = storage
         self._is_dirty = False
 

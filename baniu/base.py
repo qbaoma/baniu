@@ -98,7 +98,7 @@ class BaseQiniuClient(object):
         self.r.headers = {
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'Host': host,
-            'User-Agent': 'Baniu Client'
+            'User-Agent': 'Baniu Client',
         }
 
     def _calc_token(self, signing_string):

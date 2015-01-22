@@ -39,7 +39,20 @@ def encode_utf8(value):
 
 
 class Bucket(QiniuClient):
-    def __init__(self, bucket_name, apikey, apisecret, bucket_domain=''):
+    """
+    Bucket manager for Qiniu CDN.
+
+    :param bucket_name: your qiniu bucket name.
+    :param apikey: your qiniu apikey.
+    :param apisecret: your qiniu apisecret.
+    :param bucket_domain: domain of your bucket, including http scheme and
+                          netloc, without the last `/`, e.g:
+                          http://3217uo.com1.z0.glb.clouddn.com
+    :param allowed_host: one white-list host of your bucket.
+        If `anti-bandwith-theft` was not set, leave blank of this param.
+    """
+    def __init__(self, bucket_name, apikey, apisecret,
+                 bucket_domain='', allowed_host=''):
         super(Bucket, self).__init__(apikey, apisecret)
         if not bucket_name:
             raise ApiError(-1, "Invalid Bucket Name.")
@@ -47,6 +60,7 @@ class Bucket(QiniuClient):
         self.host = 'rs.qiniu.com'
         self._set_headers(self.host)
         self.bucket_domain = bucket_domain
+        self.allowed_host = allowed_host
 
     def save(self, file_key, filelike, **kwargs):
         """
@@ -64,7 +78,7 @@ class Bucket(QiniuClient):
         """
         return "{}/{}".format(self.bucket_domain, q(file_key))
 
-    def get_object_contents(self, file_key):
+    def get_object_contents(self, file_key, chunk_size=None):
         """
         Get contents for the file specified by the file_key.
         """
@@ -77,7 +91,20 @@ class Bucket(QiniuClient):
         object_url = "{}&{}".format(download_url, urllib.urlencode(params))
         parsed_url = urlparse.urlparse(object_url)
         host = parsed_url.netloc
+        # Bugfix: `anti-bandwidth-theft` needs a whitelist host.
+        self.r.headers.update(
+            {'Referer': 'http://{}/'.format(self.allowed_host)})
+        if chunk_size:
+            resp = self._request(object_url, method="GET",
+                                 host=host, stream=True)
+            if resp.status_code == 403:
+                raise ApiError(403, 'Forbidden. Private domain or '
+                               'protected domain need a valid allowed_host.')
+            return resp.iter_content(chunk_size=chunk_size)
         resp = self._request(object_url, method="GET", host=host)
+        if resp.status_code == 403:
+            raise ApiError(403, 'Forbidden. Private domain or '
+                                'protected domain need a valid allowed_host.')
         return resp.content
 
     def stat(self, file_key):
@@ -335,7 +362,8 @@ class Bucket(QiniuClient):
         """
         return urlsafe_b64encode("{}:{}".format(self.bucket_name, file_key))
 
-    def _request(self, url, method='POST', host='', data={}, params={}):
+    def _request(self, url, method='POST', host='', data={}, params={},
+                 stream=False):
         """
         Request resources.
 
@@ -343,7 +371,7 @@ class Bucket(QiniuClient):
         """
         if not host:
             host = self.host
-        self._set_headers(host)
+        self.r.headers.update({"Host": host})
         if method == "POST":
             self.r.headers.update({
                 "Content-Type": "application/x-www-form-urlencoded"
@@ -352,5 +380,5 @@ class Bucket(QiniuClient):
         token = self.management_token(url, data)
         auth = TokenAuth('QBox', token)
         resp = self.r._request(url, auth=auth, method=method, params=params,
-                               data=data)
+                               data=data, stream=stream)
         return resp

@@ -24,6 +24,8 @@ Or install from source::
     STORAGE_SECRETKEY = "your_qiniu_api_secret"
     STORAGE_DOMAIN = "http://yourdomian_of_the_bucket"
 
+    STATIC_URL = "{}/".format(STORAGE_DOMAIN) 
+
 Remeber to change `STORAGE_BUCKET_NAME`, `STORAGE_ACCESSKEY`,
 `STORAGE_SECRETKEY` and `STORAGE_DOMAIN` to yours.
 

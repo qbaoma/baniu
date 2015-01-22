@@ -38,6 +38,7 @@ class BaseRequestsClient(object):
                  method=None,
                  headers=None,
                  files=None,
+                 stream=False,
                  data=None,
                  params=None,
                  auth=None,
@@ -68,11 +69,11 @@ class BaseRequestsClient(object):
         if method == 'GET':
             resp = requests.get(url, params=params, headers=headers,
                                 cookies=cookies, verify=verify, auth=auth,
-                                proxies=proxyDict)
+                                proxies=proxyDict, stream=stream)
         else:
             resp = requests.post(url, params=params, data=data,
                                  headers=headers, cookies=cookies,
                                  verify=verify, files=files, auth=auth,
-                                 proxies=proxyDict)
+                                 proxies=proxyDict, stream=stream)
         self.cookies = cookies
         return resp
