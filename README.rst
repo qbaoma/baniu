@@ -8,7 +8,7 @@ creating a storage module for Django and `SAE <http://sae.sina.com.cn/>`_.
 Quick start
 ------------
 
-1.Install this package use pip::
+1.Install this package use pip(currently unavailable)::
 
     pip install baniu
 
@@ -28,6 +28,12 @@ Or install from source::
 
 Remeber to change `STORAGE_BUCKET_NAME`, `STORAGE_ACCESSKEY`,
 `STORAGE_SECRETKEY` and `STORAGE_DOMAIN` to yours.
+
+If your bucket was projected by `anti-bandwidth-theft` or something like this,
+please add `STORAGE_ALLOWED_HOST` param to your settings, without the `HTTP
+scheme` ::
+
+    STORAGE_ALLOWED_HOST = 'some.whitelist.domian'
 
 3.Use this module as `Django Storage <https://docs.djangoproject.com/en/1.5/ref/files/storage/>`_ .
 
