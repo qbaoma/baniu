@@ -130,7 +130,7 @@ class BaseQiniuClient(object):
         if not scope:
             raise ApiError(1, "Not a valid scope")
         filekey = opts.get('key', '')
-        scope = str(scope) if not filekey else "{0}:{1}".format(scope, filekey)
+        scope = scope if not filekey else "{0}:{1}".format(scope, filekey)
         if not isinstance(maxage, int):
             maxage = 0
         deadline = int(time.time()) + maxage
@@ -200,37 +200,41 @@ class BaseQiniuClient(object):
         Split the file into 4MB with each piece as a block, and split the
         block into 256KB pieces as chunks. Upload the block and chunks.
         """
+        self.task_q = Queue.Queue()
+        self.ctx_q = Queue.Queue()
         opts = kwargs.copy()
         encoded_policy = self.encode_policy(scope, maxage, **opts)
         upload_token = self.upload_token(encoded_policy)
-        self._chunk_upload(filelike, upload_token)
         key = kwargs.get('key')
+        self._chunk_upload(filelike, upload_token, filekey=key)
         filesize = self._get_file_length(filelike)
-        resp_json = self._mkfile(filesize, upload_token, key)
+        resp_json = self._mkfile(filesize, upload_token, key=key,
+                                 ctx_q=self.ctx_q)
         return resp_json
 
-    def _chunk_upload(self, filelike, upload_token):
+    def _chunk_upload(self, filelike, upload_token, filekey):
         """
         Reimplement this function to upload blocks and chunks.
         """
         raise NotImplementedError
 
-    def _mkfile(self, filesize, token, key=''):
+    def _mkfile(self, filesize, token, ctx_q, key=''):
         # Get `ctx` list from ctx_queue.
-        global ctx_queue
-        ctx_list = sorted(dump_queue(ctx_queue))
+        data = ctx_q.get()
         # According to the doc, we should use the host of the last upload
         # process.
-        host = ctx_list[-1].split("||")[-1]
-        ctx_list = [ctx.split("||")[1] for ctx in ctx_list]
+        host = data[key]['up_host']
+        ctx_dict = data[key]['ctx_str']
+        sorted_ctx_list = sorted(ctx_dict.iteritems(), key=lambda d: d[0],
+                                 reverse=False)
+        ctx_list = ",".join(ctx for index, ctx in sorted_ctx_list)
         mkfile_url = 'http://{}/mkfile/{}/{}'.format(
             host,
             filesize,
             'key/{}'.format(urlsafe_b64encode(key)) if key else '')
-        data = ",".join(ctx_list)
         auth = TokenAuth('UpToken', token)
         self.r.headers.update({'Host': host})
-        resp = self.r._request(mkfile_url, auth=auth, data=data)
+        resp = self.r._request(mkfile_url, auth=auth, data=ctx_list)
         return resp.json()
 
     def _block_generator(self, filelike):
@@ -272,7 +276,8 @@ class ChunkUploadMixin(object):
 
     """
     #  Helper functions for chunk upload.
-    def _bulk_mkblk(self, block, token, block_index, reporthook=None):
+    def _bulk_mkblk(self, block, token, block_index, ctx_q, filekey,
+                    reporthook=None):
         """
         Bulk make-block.
 
@@ -287,7 +292,6 @@ class ChunkUploadMixin(object):
         crc32 = 0
         block = StringIO.StringIO(block)
         up_host = UPLOAD_HOST
-        global ctx_queue
         global total_uploaded_queue
 
         for i in range(BLOCK_SIZE / CHUNK_SIZE):
@@ -331,25 +335,39 @@ class ChunkUploadMixin(object):
         # Add the last ctx, the block index and the last up_host from Qiniu
         # server to ctx_queue. `ctx_queue` is used to mkfile. See `_mkfile`
         # method.
-        ctx_str = "{}||{}||{}".format(block_index, ctx, up_host)
-        ctx_queue.put(ctx_str)
+        if ctx_q.qsize() > 0:
+            data = ctx_q.get()
+            uploaded_ctx = data[filekey]['ctx_str']
+            uploaded_ctx[block_index] = ctx
+        else:
+            data = {}
+            data[filekey] = {}
+            data[filekey]['ctx_str'] = {}
+            data[filekey]['ctx_str'][block_index] = ctx
+        data[filekey]['up_host'] = up_host
+        ctx_q.put(data)
 
 
 class ThreadingChunkUpload(ChunkUploadMixin, threading.Thread):
-    def __init__(self, token, reporthook=None):
+    def __init__(self, token, task_q, ctx_q, reporthook=None):
         self.r = BaseRequestsClient(host=UPLOAD_HOST)
         self.r.headers.update({'Content-Type': 'application/octet-stream'})
         self.token = token
         self.reporthook = reporthook
+        self.task_q = task_q
+        self.ctx_q = ctx_q
         threading.Thread.__init__(self)
 
     def run(self):
-        global block_queue
+        block_queue = self.task_q
         while block_queue.qsize() > 0:
             block_data = block_queue.get()
             block = block_data.get('block')
             block_index = block_data.get('index')
+            filekey = block_data.get('filekey')
             self._bulk_mkblk(block, self.token, block_index,
+                             self.ctx_q,
+                             filekey=filekey,
                              reporthook=self.reporthook)
 
 
@@ -384,7 +402,7 @@ class QiniuClient(BaseQiniuClient):
             raise ApiError(resp.status_code, resp.json()['error'])
         return resp.json()
 
-    def _chunk_upload(self, filelike, token):
+    def _chunk_upload(self, filelike, token, filekey):
         """
         Split the filelike object into 4MB pieces with a single piece as
         a `block` and pass block, token, and block_index to
@@ -412,10 +430,12 @@ class QiniuClient(BaseQiniuClient):
         tasks = []
 
         for index, block in enumerate(self._block_generator(filelike)):
-            block_queue.put({'block': block, 'index': index})
+            self.task_q.put({'block': block, 'index': index,
+                             'filekey': filekey})
 
         for i in range(UPLOAD_THREAD_COUNT):
-            task = ThreadingChunkUpload(token)
+            task = ThreadingChunkUpload(token, task_q=self.task_q,
+                                        ctx_q=self.ctx_q)
             tasks.append(task)
 
         for task in tasks:

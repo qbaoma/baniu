@@ -57,3 +57,6 @@ target/
 /projcet_log.rst
 /baniu/tests/*.data
 /baniu/tests
+/big.data
+/bucket_test.bat
+/install.bat

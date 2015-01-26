@@ -59,8 +59,8 @@ class BaseRequestsClient(object):
         http_debug = False
 
         if http_debug:
-            http_proxy = 'http://192.168.1.122:8888'
-            https_proxy = 'http://192.168.1.122:8888'
+            http_proxy = 'http://192.168.0.102:8888'
+            https_proxy = 'http://192.168.0.102:8888'
             proxyDict = {'http': http_proxy,
                          'https': https_proxy}
         else:
